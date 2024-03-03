@@ -22,8 +22,8 @@ typedef int64_t  i64;
 typedef size_t   usize;
 typedef ssize_t  isize;
 
-#define SCREEN_WIDTH 384
-#define SCREEN_HEIGHT 216
+#define SCREEN_WIDTH 640
+#define SCREEN_HEIGHT 480
 
 #define dot(v0, v1) ({ const v2 _v0 = (v0), _v1 = (v1); (_v0.x * _v1.x) + (_v0.y * _v1.y); })
 #define length(v) ({ const v2 _v = (v); sqrtf(dot(_v, _v)); })
@@ -34,5 +34,10 @@ typedef ssize_t  isize;
 
 typedef struct v2_s { f32 x, y; } v2;
 typedef struct v2i_s { i32 x, y; } v2i;
+
+typedef struct deltaTime_s {
+    f32 delta;
+    f32 time;
+} deltaTime;
 
 #endif //FLATDAWG_TYPES_H

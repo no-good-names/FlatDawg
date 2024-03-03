@@ -5,16 +5,29 @@
 
 #include "types.h"
 
-#define MAP_SIZE 8
-static u8 MAPDATA[MAP_SIZE * MAP_SIZE] = {
-        1, 1, 1, 1, 1, 1, 1, 1,
-        1, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 3, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 2, 0, 4, 4, 0, 1,
-        1, 0, 0, 0, 4, 0, 0, 1,
-        1, 0, 3, 0, 0, 0, 0, 1,
-        1, 1, 1, 1, 1, 1, 1, 1,
+/*
+ *
+ * FlatDawg: A simple (flat) ray-casting engine
+ * Credits:
+ *      https://lodev.org/cgtutor/raycasting.html // Lode Vandevenne - Raycasting tutorial (C)
+ *      https://github.com/jdah/doomenstein-3d // jdah - Doomenstein 3D (C)
+ *
+ */
+
+
+#define MAP_SIZE 16
+static u8 MAPDATA[16 * 12] = {
+        1,1,1,1,1,1,1,1,1,1,1,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,0,0,0,0,0,0,0,0,0,0,1,
+        1,1,1,1,1,1,1,1,1,1,1,1
 };
 
 struct {
@@ -35,85 +48,79 @@ static void verline(int x, int y0, int y1, u32 color) {
 
 static void render() {
     for (int x = 0; x < SCREEN_WIDTH; x++) {
-        // x coordinate in space from [-1, 1]
-        const f32 xcam = (2 * (x / (f32) (SCREEN_WIDTH))) - 1;
+        f32 cameraX = 2 * x / (f32) SCREEN_WIDTH - 1;
+        v2 rayDir = (v2) {state.dir.x + state.plane.x * cameraX, state.dir.y + state.plane.y * cameraX};
 
-        // ray direction through this column
-        const v2 dir = {
-                state.dir.x + state.plane.x * xcam,
-                state.dir.y + state.plane.y * xcam
+        deltaTime time = {0, 0};
+
+        v2 map = (v2) {(f32) state.pos.x, (f32) state.pos.y};
+
+        f32 sideDistX, sideDistY;
+
+        const v2 deltaDist = (v2) {
+                fabs(rayDir.x) < 1e-20 ? 1e30 : fabs(1.0f / rayDir.x),
+                fabs(rayDir.y) < 1e-20 ? 1e30 : fabs(1.0f / rayDir.y)
         };
 
-        v2 pos = state.pos;
-        v2i ipos = { (int) pos.x, (int) pos.y };
+        f32 perpWallDist;
 
-        // distance ray must travel from one x/y side to the next
-        const v2 deltadist = {
-                fabsf(dir.x) < 1e-20 ? 1e30 : fabsf(1.0f / dir.x),
-                fabsf(dir.y) < 1e-20 ? 1e30 : fabsf(1.0f / dir.y),
-        };
+        i32 stepX, stepY;
 
-        // distance from start position to first x/y side
-        v2 sidedist = {
-                deltadist.x * (dir.x < 0 ? (pos.x - ipos.x) : (ipos.x + 1 - pos.x)),
-                deltadist.y * (dir.y < 0 ? (pos.y - ipos.y) : (ipos.y + 1 - pos.y)),
-        };
+        int hit = 0;
+        int side;
 
-        // integer step direction for x/y, calculated from overall diff
-        const v2i step = { (int) sign(dir.x), (int) sign(dir.y) };
-
-        // DDA hit
-        struct { int val, side; v2 pos; } hit = { 0, 0, { 0.0f, 0.0f } };
-
-        while (!hit.val) {
-            if (sidedist.x < sidedist.y) {
-                sidedist.x += deltadist.x;
-                ipos.x += step.x;
-                hit.side = 0;
+        if (rayDir.x < 0) {
+            stepX = -1;
+            sideDistX = (state.pos.x - map.x) * deltaDist.x;
+        } else {
+            stepX = 1;
+            sideDistX = (map.x + 1.0f - state.pos.x) * deltaDist.x;
+        }
+        if (rayDir.y < 0) {
+            stepY = -1;
+            sideDistY = (state.pos.y - map.y) * deltaDist.y;
+        } else {
+            stepY = 1;
+            sideDistY = (map.y + 1.0f - state.pos.y) * deltaDist.y;
+        }
+        // DDA
+        while (!hit) {
+            if (sideDistX < sideDistY) {
+                sideDistX += deltaDist.x;
+                map.x += stepX;
+                side = 0;
             } else {
-                sidedist.y += deltadist.y;
-                ipos.y += step.y;
-                hit.side = 1;
+                sideDistY += deltaDist.y;
+                map.y += stepY;
+                side = 1;
             }
-
-            hit.val = MAPDATA[ipos.y * MAP_SIZE + ipos.x];
+            if (MAPDATA[(i32) map.y * MAP_SIZE + (i32) map.x] > 0) { hit = 1; }
+        }
+        if (side == 0) {
+            perpWallDist = (sideDistX - deltaDist.x);
+        } else {
+            perpWallDist = (sideDistY - deltaDist.y);
         }
 
-        u32 color;
-        switch (hit.val) {
-            case 1: color = 0xFF0000FF; break;
-            case 2: color = 0xFF00FF00; break;
-            case 3: color = 0xFFFF0000; break;
-            case 4: color = 0xFFFF00FF; break;
+        int lineHeight = (int) (SCREEN_HEIGHT / perpWallDist);
+
+        int drawStart = -lineHeight / 2 + SCREEN_HEIGHT / 2;
+        if (drawStart < 0) { drawStart = 0; }
+        int drawEnd = lineHeight / 2 + SCREEN_HEIGHT / 2;
+        if (drawEnd >= SCREEN_HEIGHT) { drawEnd = SCREEN_HEIGHT - 1; }
+
+        u32 color = 0;
+        switch (MAPDATA[(i32) map.y * MAP_SIZE + (i32) map.x]) {
+            case 1: color = 0x00FF0000; break;
+            case 2: color = 0x0000FF00; break;
+            case 3: color = 0x000000FF; break;
+            case 4: color = 0x00FFFF00; break;
+            default:color = 0x00FFFFFF; break;
         }
 
-        // darken colors on y-sides
-        if (hit.side == 1) {
-            const u32
-                    br = ((color & 0xFF00FF) * 0xC0) >> 8,
-                    g  = ((color & 0x00FF00) * 0xC0) >> 8;
+        if (side) (color >>= color/2);
 
-            color = 0xFF000000 | (br & 0xFF00FF) | (g & 0x00FF00);
-        }
-
-        hit.pos = (v2) { pos.x + sidedist.x, pos.y + sidedist.y };
-
-        // distance to hit
-        const f32 dperp =
-                hit.side == 0 ?
-                (sidedist.x - deltadist.x)
-                              : (sidedist.y - deltadist.y);
-
-        // perform perspective division, calculate line height relative to
-        // screen center
-        const int
-                h = (int) (SCREEN_HEIGHT / dperp),
-                y0 = max((SCREEN_HEIGHT / 2) - (h / 2), 0),
-                y1 = min((SCREEN_HEIGHT / 2) + (h / 2), SCREEN_HEIGHT - 1);
-
-        verline(x, 0, y0, 0xFF202020);
-        verline(x, y0, y1, color);
-        verline(x, y1, SCREEN_HEIGHT - 1, 0xFF505050);
+        verline(x, drawStart, drawEnd, color);
     }
 }
 
@@ -161,9 +168,7 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        const f32
-                rotspeed = 3.0f * 0.016f,
-                movespeed = 3.0f * 0.016f;
+        const f32 rotspeed = 3.0f * 0.016f, movespeed = 3.0f * 0.016f;
 
         const u8 *keystate = SDL_GetKeyboardState(NULL);
         if (keystate[SDL_SCANCODE_LEFT]) {
@@ -175,13 +180,17 @@ int main(int argc, char *argv[]) {
         }
 
         if (keystate[SDL_SCANCODE_UP]) {
-            state.pos.x += state.dir.x * movespeed;
-            state.pos.y += state.dir.y * movespeed;
+            if(MAPDATA[(i32) (state.pos.y + state.dir.y * movespeed) * MAP_SIZE + (i32) (state.pos.x + state.dir.x * movespeed)] == 0) {
+                state.pos.x += state.dir.x * movespeed;
+                state.pos.y += state.dir.y * movespeed;
+            }
         }
 
         if (keystate[SDL_SCANCODE_DOWN]) {
-            state.pos.x -= state.dir.x * movespeed;
-            state.pos.y -= state.dir.y * movespeed;
+            if(MAPDATA[(i32) (state.pos.y - state.dir.y * movespeed) * MAP_SIZE + (i32) (state.pos.x - state.dir.x * movespeed)] == 0) {
+                state.pos.x -= state.dir.x * movespeed;
+                state.pos.y -= state.dir.y * movespeed;
+            }
         }
 
         memset(state.pixels, 0, sizeof(state.pixels));
