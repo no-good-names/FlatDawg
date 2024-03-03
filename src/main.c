@@ -15,19 +15,16 @@
  */
 
 
-#define MAP_SIZE 16
-static u8 MAPDATA[16 * 12] = {
-        1,1,1,1,1,1,1,1,1,1,1,1,
-        1,0,0,0,0,0,0,0,0,0,0,1,
-        1,0,0,0,0,0,0,0,0,0,0,1,
-        1,0,0,0,0,0,0,0,0,0,0,1,
-        1,0,0,0,0,0,0,0,0,0,0,1,
-        1,0,0,0,0,0,0,0,0,0,0,1,
-        1,0,0,0,0,0,0,0,0,0,0,1,
-        1,0,0,0,0,0,0,0,0,0,0,1,
-        1,0,0,0,0,0,0,0,0,0,0,1,
-        1,0,0,0,0,0,0,0,0,0,0,1,
-        1,1,1,1,1,1,1,1,1,1,1,1
+#define MAP_SIZE 8
+static u8 MAPDATA[MAP_SIZE * MAP_SIZE] = {
+        1, 1, 1, 1, 1, 1, 1, 1,
+        1, 0, 0, 0, 0, 0, 0, 1,
+        1, 0, 0, 0, 0, 0, 0, 1,
+        1, 0, 0, 0, 0, 0, 0, 1,
+        1, 0, 0, 0, 0, 0, 0, 1,
+        1, 0, 0, 0, 0, 0, 0, 1,
+        1, 0, 0, 0, 0, 0, 0, 1,
+        1, 1, 1, 1, 1, 1, 1, 1
 };
 
 struct {
@@ -158,6 +155,8 @@ int main(int argc, char *argv[]) {
     state.dir = normalize(((v2) { -1.0f, 0.1f }));
     state.plane = (v2) { 0.0f, 0.66f };
 
+    v2 delta = (v2) { 0.0f, 0.0f };
+
     while (!state.quit) {
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
@@ -168,7 +167,11 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        const f32 rotspeed = 3.0f * 0.016f, movespeed = 3.0f * 0.016f;
+        delta.x = delta.y;
+        delta.y = SDL_GetTicks();
+        f32 frameTime = (delta.y - delta.x) / 1000.0f;
+
+        const f32 rotspeed = frameTime * 5.0f, movespeed = frameTime * 5.0f;
 
         const u8 *keystate = SDL_GetKeyboardState(NULL);
         if (keystate[SDL_SCANCODE_LEFT]) {
@@ -184,6 +187,7 @@ int main(int argc, char *argv[]) {
                 state.pos.x += state.dir.x * movespeed;
                 state.pos.y += state.dir.y * movespeed;
             }
+            printf("pos: %f, %f\n", state.pos.x, state.pos.y);
         }
 
         if (keystate[SDL_SCANCODE_DOWN]) {
@@ -191,6 +195,7 @@ int main(int argc, char *argv[]) {
                 state.pos.x -= state.dir.x * movespeed;
                 state.pos.y -= state.dir.y * movespeed;
             }
+            printf("pos: %f, %f\n", state.pos.x, state.pos.y);
         }
 
         memset(state.pixels, 0, sizeof(state.pixels));
