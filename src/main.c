@@ -15,17 +15,22 @@
  */
 
 
-#define MAP_SIZE 8
+#define MAP_SIZE 12
 static u8 MAPDATA[MAP_SIZE * MAP_SIZE] = {
-        1, 1, 1, 1, 1, 1, 1, 1,
-        1, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 2, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 1,
-        1, 1, 1, 1, 1, 1, 1, 1
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        1,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        1,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        1,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        1,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        1,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        1,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        1,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        1,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        1 ,0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
 };
+
 
 struct {
     SDL_Window *window;
@@ -45,13 +50,13 @@ static void verline(int x, int y0, int y1, u32 color) {
 
 static void render() {
     for (int x = 0; x < SCREEN_WIDTH; x++) {
-        f32 cameraX = 2 * x / (f32) SCREEN_WIDTH - 1;
-        v2 rayDir = (v2) {state.dir.x + state.plane.x * cameraX, state.dir.y + state.plane.y * cameraX};
-
-        deltaTime time = {0, 0};
+        f32 xcam = 2 * x / (f32) SCREEN_WIDTH - 1;
+        v2 rayDir = (v2) {state.dir.x + state.plane.x * xcam, state.dir.y + state.plane.y * xcam};
 
         v2 pos = state.pos;
-        v2i ipos = (v2i) { (i32) sign(pos.x), (i32) sign(pos.y) };
+        v2i ipos = (v2i) { (i32) pos.x, (i32) pos.y };
+
+        f32 perpWallDist;
 
         const v2 deltaDist = (v2) {
                 fabsf(rayDir.x) < 1e-20 ? 1e30 : fabsf(1.0f / rayDir.x),
@@ -63,17 +68,11 @@ static void render() {
                 rayDir.y < 0 ? (pos.y - ipos.y) * deltaDist.y : (ipos.y + 1.0f - pos.y) * deltaDist.y
         };
 
-        const v2i step = (v2i) {
-                rayDir.x < 0 ? -1 : 1,
-                rayDir.y < 0 ? -1 : 1
-        };
-
-        f32 perpWallDist;
+        const v2i step = { (int) sign(rayDir.x), (int) sign(rayDir.y) };
 
         struct {
             int val, side; v2 pos;
         } hit = {0, 0, {0.0f, 0.0f}};
-        int side;
 
         // DDA
         while (!hit.val) {
@@ -86,20 +85,20 @@ static void render() {
                 ipos.y += step.y;
                 hit.side = 1;
             }
+            // Check if ray has hit a wall
             hit.val = MAPDATA[ipos.y * MAP_SIZE + ipos.x];
         }
-        if (hit.side == 0) {
-            perpWallDist = (sideDist.x - deltaDist.x);
-        } else {
-            perpWallDist = (sideDist.y - deltaDist.y);
-        }
 
-        int lineHeight = (int) (SCREEN_HEIGHT / perpWallDist);
+        if (hit.side == 0) perpWallDist = (ipos.x - pos.x + (1 - step.x) / 2) / rayDir.x;
+        else               perpWallDist = (ipos.y - pos.y + (1 - step.y) / 2) / rayDir.y;
 
+        int lineHeight = (int)(SCREEN_HEIGHT / perpWallDist);
+
+        // Calculate lowest and highest pixel to fill in the current stripe
         int drawStart = -lineHeight / 2 + SCREEN_HEIGHT / 2;
-        if (drawStart < 0) { drawStart = 0; }
+        if (drawStart < 0) drawStart = 0;
         int drawEnd = lineHeight / 2 + SCREEN_HEIGHT / 2;
-        if (drawEnd >= SCREEN_HEIGHT) { drawEnd = SCREEN_HEIGHT - 1; }
+        if (drawEnd >= SCREEN_HEIGHT) drawEnd = SCREEN_HEIGHT - 1;
 
         u32 color = 0;
         switch (hit.val) {
@@ -107,14 +106,18 @@ static void render() {
             case 2: color = 0x0000FF00; break;
             case 3: color = 0x000000FF; break;
             case 4: color = 0x00FFFF00; break;
-            default:color = 0x00FFFFFF; break;
+            default: color = 0x00FFFFFF; break;
         }
 
-        hit.pos = (v2) { pos.x + sideDist.x, pos.y + sideDist.y };
-
-        verline(x, 0, drawEnd, 0xFF202020);
-        verline(x, drawStart, SCREEN_HEIGHT - 1, 0xFF505050);
-        verline(x, drawStart, drawEnd, color);
+        // Draw for side 0
+        if (hit.side == 0) {
+            verline(x, drawStart, drawEnd, color);
+        }
+            // Draw for side 1
+        else {
+            color = (color >> 1) & 8355711;
+            verline(x, drawStart, drawEnd, color);
+        }
     }
 }
 
@@ -164,13 +167,7 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        delta.x = delta.y;
-        delta.y = SDL_GetTicks();
-        f32 frameTime = (delta.y - delta.x) / 1000.0f;
-        // FPS
-        printf("FPS: %f\n", (1.0f / frameTime));
-
-        const f32 rotspeed = frameTime * 5.0f, movespeed = frameTime * 5.0f;
+        const f32 rotspeed = 3.0f * 0.016f, movespeed = 3.0f * 0.016f;
 
         const u8 *keystate = SDL_GetKeyboardState(NULL);
         if (keystate[SDL_SCANCODE_LEFT]) {
@@ -182,18 +179,13 @@ int main(int argc, char *argv[]) {
         }
 
         if (keystate[SDL_SCANCODE_UP]) {
-            if(MAPDATA[(i32) (state.pos.y + state.dir.y * movespeed) * MAP_SIZE + (i32) (state.pos.x + state.dir.x * movespeed)] == 0) {
-                state.pos.x += state.dir.x * movespeed;
-                state.pos.y += state.dir.y * movespeed;
-            }
+            state.pos.x += state.dir.x * movespeed;
+            state.pos.y += state.dir.y * movespeed;
         }
 
         if (keystate[SDL_SCANCODE_DOWN]) {
-            if(MAPDATA[(i32) (state.pos.y - state.dir.y * movespeed) * MAP_SIZE + (i32) (state.pos.x - state.dir.x * movespeed)] == 0) {
-                state.pos.x -= state.dir.x * movespeed;
-                state.pos.y -= state.dir.y * movespeed;
-            }
-            printf("pos: %f, %f\n", state.pos.x, state.pos.y);
+            state.pos.x -= state.dir.x * movespeed;
+            state.pos.y -= state.dir.y * movespeed;
         }
 
         memset(state.pixels, 0, sizeof(state.pixels));
