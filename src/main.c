@@ -20,7 +20,7 @@ static u8 MAPDATA[MAP_SIZE * MAP_SIZE] = {
         1, 1, 1, 1, 1, 1, 1, 1,
         1, 0, 0, 0, 0, 0, 0, 1,
         1, 0, 0, 0, 0, 0, 0, 1,
-        1, 0, 0, 0, 0, 0, 0, 1,
+        1, 0, 2, 0, 0, 0, 0, 1,
         1, 0, 0, 0, 0, 0, 0, 1,
         1, 0, 0, 0, 0, 0, 0, 1,
         1, 0, 0, 0, 0, 0, 0, 1,
@@ -50,53 +50,48 @@ static void render() {
 
         deltaTime time = {0, 0};
 
-        v2 map = (v2) {(f32) state.pos.x, (f32) state.pos.y};
-
-        f32 sideDistX, sideDistY;
+        v2 pos = state.pos;
+        v2i ipos = (v2i) { (i32) sign(pos.x), (i32) sign(pos.y) };
 
         const v2 deltaDist = (v2) {
-                fabs(rayDir.x) < 1e-20 ? 1e30 : fabs(1.0f / rayDir.x),
-                fabs(rayDir.y) < 1e-20 ? 1e30 : fabs(1.0f / rayDir.y)
+                fabsf(rayDir.x) < 1e-20 ? 1e30 : fabsf(1.0f / rayDir.x),
+                fabsf(rayDir.y) < 1e-20 ? 1e30 : fabsf(1.0f / rayDir.y)
+        };
+
+        v2 sideDist = (v2) {
+                rayDir.x < 0 ? (pos.x - ipos.x) * deltaDist.x : (ipos.x + 1.0f - pos.x) * deltaDist.x,
+                rayDir.y < 0 ? (pos.y - ipos.y) * deltaDist.y : (ipos.y + 1.0f - pos.y) * deltaDist.y
+        };
+
+        const v2i step = (v2i) {
+                rayDir.x < 0 ? -1 : 1,
+                rayDir.y < 0 ? -1 : 1
         };
 
         f32 perpWallDist;
 
-        i32 stepX, stepY;
-
-        int hit = 0;
+        struct {
+            int val, side; v2 pos;
+        } hit = {0, 0, {0.0f, 0.0f}};
         int side;
 
-        if (rayDir.x < 0) {
-            stepX = -1;
-            sideDistX = (state.pos.x - map.x) * deltaDist.x;
-        } else {
-            stepX = 1;
-            sideDistX = (map.x + 1.0f - state.pos.x) * deltaDist.x;
-        }
-        if (rayDir.y < 0) {
-            stepY = -1;
-            sideDistY = (state.pos.y - map.y) * deltaDist.y;
-        } else {
-            stepY = 1;
-            sideDistY = (map.y + 1.0f - state.pos.y) * deltaDist.y;
-        }
         // DDA
-        while (!hit) {
-            if (sideDistX < sideDistY) {
-                sideDistX += deltaDist.x;
-                map.x += stepX;
-                side = 0;
+        while (!hit.val) {
+            if (sideDist.x < sideDist.y) {
+                sideDist.x += deltaDist.x;
+                ipos.x += step.x;
+                hit.side = 0;
             } else {
-                sideDistY += deltaDist.y;
-                map.y += stepY;
-                side = 1;
+                sideDist.y += deltaDist.y;
+                ipos.y += step.y;
+                hit.side = 1;
             }
-            if (MAPDATA[(i32) map.y * MAP_SIZE + (i32) map.x] > 0) { hit = 1; }
+            hit.val = MAPDATA[ipos.y * MAP_SIZE + ipos.x];
         }
-        if (side == 0) {
-            perpWallDist = (sideDistX - deltaDist.x);
+        if (hit.side == 0) {
+            perpWallDist = (sideDist.x - deltaDist.x);
         } else {
-            perpWallDist = (sideDistY - deltaDist.y);
+            perpWallDist = (sideDist.y - deltaDist.y);
         }
 
         int lineHeight = (int) (SCREEN_HEIGHT / perpWallDist);
@@ -107,7 +102,7 @@ static void render() {
         if (drawEnd >= SCREEN_HEIGHT) { drawEnd = SCREEN_HEIGHT - 1; }
 
         u32 color = 0;
-        switch (MAPDATA[(i32) map.y * MAP_SIZE + (i32) map.x]) {
+        switch (hit.val) {
             case 1: color = 0x00FF0000; break;
             case 2: color = 0x0000FF00; break;
             case 3: color = 0x000000FF; break;
@@ -115,8 +110,10 @@ static void render() {
             default:color = 0x00FFFFFF; break;
         }
 
-        if (side) (color >>= color/2);
+        hit.pos = (v2) { pos.x + sideDist.x, pos.y + sideDist.y };
 
+        verline(x, 0, drawEnd, 0xFF202020);
+        verline(x, drawStart, SCREEN_HEIGHT - 1, 0xFF505050);
         verline(x, drawStart, drawEnd, color);
     }
 }
@@ -170,6 +167,8 @@ int main(int argc, char *argv[]) {
         delta.x = delta.y;
         delta.y = SDL_GetTicks();
         f32 frameTime = (delta.y - delta.x) / 1000.0f;
+        // FPS
+        printf("FPS: %f\n", (1.0f / frameTime));
 
         const f32 rotspeed = frameTime * 5.0f, movespeed = frameTime * 5.0f;
 
@@ -187,7 +186,6 @@ int main(int argc, char *argv[]) {
                 state.pos.x += state.dir.x * movespeed;
                 state.pos.y += state.dir.y * movespeed;
             }
-            printf("pos: %f, %f\n", state.pos.x, state.pos.y);
         }
 
         if (keystate[SDL_SCANCODE_DOWN]) {
